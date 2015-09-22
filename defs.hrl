@@ -3,8 +3,8 @@
 % It contains the following fields:
 %   gui: the name (or Pid) of the GUI process.
 %   nick: the nick of the user
--record(client_st, {gui,nick}).
+-record(client_st, {gui,nick,connected}).
 
 % This record defines the structure of the server process.
 % Add whatever other fields you need.
--record(server_st, {}).
+-record(server_st, {users = [{pid,nick}]}).
