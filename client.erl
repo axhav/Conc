@@ -31,7 +31,6 @@ loop(St = #client_st{nick = Nick,connected = Connected}, {connect, Server}) ->
 %% Disconnect from server
 loop(St = #client_st{nick = Nick,connected = SPid}, disconnect) ->
     Result = genserver:request(SPid,{disconnect,Nick}),
-    %SPid ! {request,self(),self(),{disconnect, self()}},
     case Result of
         ok -> 
             St1 = St#client_st{connected = false},
@@ -42,9 +41,10 @@ loop(St = #client_st{nick = Nick,connected = SPid}, disconnect) ->
     %{{error, not_implemented, "Not implemented"}, St} ;
 
 % Join channel
-loop(St, {join, Channel}) ->
-    % {ok, St} ;
-    {{error, not_implemented, "Not implemented"}, St} ;
+loop(St = #client_st{nick = Nick,connected = SPid}, {join, Channel}) ->
+    Result = genserver:request(SPid,{join,self(),Nick,Channel}),
+    {ok, St};
+    %{{error, not_implemented, "Not implemented"}, St} ;
 
 %% Leave channel
 loop(St, {leave, Channel}) ->
