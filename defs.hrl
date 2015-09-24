@@ -7,4 +7,4 @@
 
 % This record defines the structure of the server process.
 % Add whatever other fields you need.
--record(server_st, {users = [{pid,nick}]}).
+-record(server_st, {users = [{nick}]}).

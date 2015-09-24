@@ -13,36 +13,30 @@ initial_state(Nick, GUIName) ->
 %% Connect to server
 loop(St = #client_st{nick = Nick,connected = Connected}, {connect, Server}) ->
     if
-        Connected == true ->
+        Connected /= false ->
             {error, user_already_connected, "User already connected to a server"};
         true ->
             SPid = whereis(list_to_atom(Server)),
             io:format("stuff ~p~n ~p~n",[SPid,self()]),
-            %{request, From, Ref, Data} 
-            SPid ! {request,self(),self(),{connect, self(), Nick}},
-            %SPid ! {connect, self(), Nick},
-            receive
-                {ok, SPid } -> 
+            Result = genserver:request(SPid,{connect,Nick}),
+            case Result of
+                ok ->
                     St1 = St#client_st{connected = SPid},
                     {ok,St1};
-                {ok, Test} ->
-                    io:format("second case"),
-                    {ok,St}
-            after 
-                5000 ->
+                true ->
                     {error,server_not_reached,"Server timeout"}
             end
     end;
 
 %% Disconnect from server
-loop(St = #client_st{connected = SPid}, disconnect) ->
-    SPid ! {request,self(),self(),{disconnect, self()}},
-    receive
-        {ok, SPid } -> 
+loop(St = #client_st{nick = Nick,connected = SPid}, disconnect) ->
+    Result = genserver:request(SPid,{disconnect,Nick}),
+    %SPid ! {request,self(),self(),{disconnect, self()}},
+    case Result of
+        ok -> 
             St1 = St#client_st{connected = false},
-                {ok,St1}
-    after 
-        5000 ->
+            {ok,St1};
+        true ->
             {error,server_not_reached,"Server timeout"}
     end;
     %{{error, not_implemented, "Not implemented"}, St} ;
