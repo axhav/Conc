@@ -3,11 +3,11 @@
 % It contains the following fields:
 %   gui: the name (or Pid) of the GUI process.
 %   nick: the nick of the user
--record(client_st, {gui,nick,connected}).
+-record(client_st, {gui,nick,connected,channels}).
 
 % This record defines the structure of the server process.
 % Add whatever other fields you need.
--record(server_st, {users = [nick],channels = [channel]}).
+-record(server_st, {name, users = [nick],channels = [channel]}).
 
 
 -record(chat_st, {name,users = [{cpid,nick}]}).
