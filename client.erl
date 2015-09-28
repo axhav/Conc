@@ -103,7 +103,7 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GU
     io:format("server stuff ~p~n",[EndChan]),
     if 
         Temp -> 
-            Result = genserver:request(EndChan),{send,Nick,Msg}),
+            Result = genserver:request(EndChan,{send,Nick,Msg}),
             {ok, St} ;
         true -> 
             {{error,user_not_joined,"User is not connected to that channel"},St}
