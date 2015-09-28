@@ -100,6 +100,7 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GU
      %   _ ->
     %        EndChan = list_to_atom(Channel)
     %end,
+    io:format("server stuff ~p~n",[whereis(list_to_atom(Channel))]),
     if 
         Temp -> 
             Result = genserver:request(whereis(list_to_atom(Channel)),{send,Nick,Msg}),
