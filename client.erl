@@ -96,7 +96,7 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GU
     Temp = lists:any(fun(X) -> X ==Channel end,  Chan),
     case SPid of
         {Serv,Add} ->
-            EndChan = {whereis(list_to_atom(Channel)),Add};
+            EndChan = {list_to_atom(Channel),Add};
        _ ->
             EndChan = list_to_atom(Channel)
     end,
