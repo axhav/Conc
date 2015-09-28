@@ -94,6 +94,7 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {leave, Chan
 % Sending messages
 loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GUI, Channel, Msg}) ->
     Temp = lists:any(fun(X) -> X ==Channel end,  Chan),
+    io:format("server stuff ~p~n",[Channel]),
     if 
         Temp -> 
             Result = genserver:request(list_to_atom(Channel),{send,Nick,Msg}),
