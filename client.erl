@@ -94,15 +94,15 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {leave, Chan
 % Sending messages
 loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GUI, Channel, Msg}) ->
     Temp = lists:any(fun(X) -> X ==Channel end,  Chan),
-    case SPid of
-        {Serv,Add} ->
-            EndChan = {list_to_atom(Channel),list_to_atom(Add)};
-        _ ->
-            EndChan = list_to_atom(Channel)
-    end,
+    %case SPid of
+    %    {Serv,Add} ->
+    %        EndChan = {whereis(list_to_atom(Channel)),list_to_atom(Add)};
+     %   _ ->
+    %        EndChan = list_to_atom(Channel)
+    %end,
     if 
         Temp -> 
-            Result = genserver:request(EndChan,{send,Nick,Msg}),
+            Result = genserver:request(whereis(list_to_atom(Channel)),{send,Nick,Msg}),
             {ok, St} ;
         true -> 
             {{error,user_not_joined,"User is not connected to that channel"},St}
