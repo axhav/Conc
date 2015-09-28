@@ -18,7 +18,7 @@ loop(St = #client_st{nick = Nick,connected = Connected}, {connect, Server}) ->
         true ->
             case Server of
                 {Serv, Add} ->
-                    SPid = {list_to_atom(Serv),Add};
+                    SPid = {list_to_atom(Serv),list_to_atom(Add)};
                 _ ->
                     SPid = whereis(list_to_atom(Server))
             end,
