@@ -32,6 +32,7 @@ loop(St = #client_st{nick = Nick,connected = Connected}, {connect, Server}) ->
                     {{error,server_not_reached ,"Server not reached"},St}
             end
     end;
+    
 
 %% Disconnect from server
 loop(St = #client_st{nick = Nick,connected = SPid, channels = Chan}, disconnect) ->

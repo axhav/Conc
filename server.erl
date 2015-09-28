@@ -105,14 +105,18 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                     {ok,NSt}
             end;
         {send,Nick,Msg} ->
-            [ genserver:request(P,{incoming_msg, ChatName, Nick, Msg})||  {P,U} <- Users,U /= Nick ],
+            % [ genserver:request(P,{incoming_msg, ChatName, Nick, Msg})||  {P,U} <- Users,U /= Nick ],
+            spawn(fun() -> sendMessages(Users,Nick,Msg,ChatName) end),
             {ok,St}  
     end.
     
-    
-    
-    
-                    %NChannels = [if 
-                    %    C == Channel -> {C,lists:append(U,Nick)};
-                    %   true -> {C,U} end 
-                    %    || {C,U} <- Channels];
+sendMessages([] ,_,_,_) ->
+    done;
+sendMessages([{P,U}|XS] ,Nick,Msg,ChatName) ->
+    if
+        U == Nick ->
+            sendMessages(XS,Nick,Msg,ChatName);
+        true ->
+            genserver:request(P,{incoming_msg, ChatName, Nick, Msg}),
+            sendMessages(XS,Nick,Msg,ChatName)
+    end.
