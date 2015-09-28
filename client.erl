@@ -16,7 +16,12 @@ loop(St = #client_st{nick = Nick,connected = Connected}, {connect, Server}) ->
         Connected /= false ->
             {{error, user_already_connected, "User already connected to a server"},St};
         true ->
-            SPid = whereis(list_to_atom(Server)),
+            case Server of
+                {Serv, Add} ->
+                    SPid = {list_to_atom(Serv),Add};
+                _ ->
+                    SPid = whereis(list_to_atom(Server))
+            end,
             if 
                 SPid /= undefined ->
                     %io:format("stuff ~p~n ~p~n",[SPid,self()]),
