@@ -120,12 +120,16 @@ init(Name) ->
     putStrLn(blue("\n# Test: "++Name)),
     InitState = server:initial_state(?SERVER),
     Pid = genserver:start(?SERVERATOM, InitState, fun server:loop/2),
-    assert("server startup", is_pid(Pid)).
+    % putStrLn("server ~p", [Pid]),
+    assert("server startup", is_pid(Pid)),
+    Pid.
 
 % Start new GUI and register it as Name
 new_gui(Name) ->
+    new_gui(Name, self()).
+new_gui(Name, Mirror) ->
     catch(unregister(list_to_atom(Name))),
-    {ok, Pid} = dummy_gui:start_link(Name,self()),
+    {ok, Pid} = dummy_gui:start_link(Name,Mirror),
     Pid.
 
 find_unique_name(Prefix) ->
@@ -200,7 +204,7 @@ send_message(ClientAtom, Channel, Message) ->
     Result = request(ClientAtom, {msg_from_GUI,Channel,Message}),
     assert_ok(to_string(ClientAtom)++" sends message on "++Channel, Result).
 
-% Receive a message from dummy GUI
+% Receive a specific message from dummy GUI
 receive_message(Channel, Nick, Message) ->
     receive
         {msg_to_GUI, From, Msg} ->
@@ -504,100 +508,259 @@ nick_taken_test_DISABLED() ->
 
 % --- Concurrency unit tests -------------------------------------------------
 
-robustness_test_() ->
-    {timeout, 10, [{test_client,robustness}]}.
+robustness_channel_test_() ->
+    {timeout, 10, [{test_client,robustness_channel}]}.
 
--define(CONC_CHANS, 4).
--define(CONC_USERS, 3). % per channel
--define(CONC_MSGS, 2). % per user
+-define(CONC_1_CHANS, 4).
+-define(CONC_1_USERS, 3). % per channel
+-define(CONC_1_MSGS, 2). % per user
 
+% Force one request to hang and see if the others still make progress
+%
 %    ch1       ch2       ch3
 %   / | \     / | \     / | \
 % u1 u2 u3  u4 u5 u6  u7 u8 u9
-robustness() ->
-  MinUsers = (?CONC_CHANS - 1) * ?CONC_USERS, % all users on failed channel timeout
-  MaxUsers = (?CONC_CHANS * ?CONC_USERS), % no users on failed channel timeout
-  NMsgs = ?CONC_CHANS * ?CONC_USERS * ?CONC_MSGS,
+robustness_channel() ->
+  NRecvs = ?CONC_1_CHANS * ?CONC_1_USERS * (?CONC_1_USERS - 1) * ?CONC_1_MSGS, % sent to clients
   random:seed(erlang:now()),
-  SleepN = random:uniform(NMsgs - (?CONC_MSGS + 1)), % if NMsgs == 24, then SleepN must be max 21
+  SleepCount = random:uniform(NRecvs div 4), % how many will sleep
+  SleepNs = lists:usort([random:uniform(NRecvs) || _ <- lists:seq(1, SleepCount)]),
 
-  % The sleepy process will tell request #SleepN to sleep
+  % The sleepy process will tell request to sleep, if N in SleepNs it's a client
   % Everyone else can continue
-  Sleepy = fun (F, N) ->
+  Sleepy = fun (F, {N, ClientPids}) ->
     receive
-      {hi, Pid} ->
+      {add_client, Pid} ->
+        F(F, {N, ClientPids ++ [Pid]}) ;
+      {hi, ToPid, Pid} ->
+        IsToClient = lists:member(ToPid, ClientPids),
+        ShallSleep = lists:member(N, SleepNs),
         if
-          (N == SleepN) ->
+          (not IsToClient) ->
+            Pid ! {go},
+            F(F, {N, ClientPids}) ;
+          (ShallSleep) ->
             Pid ! {wait, 500000}; % ms
           true ->
             Pid ! {go}
-        end
-    end,
-    F(F, N+1)
+        end,
+        F(F, {N+1, ClientPids})
+    end
   end,
   catch(unregister(sleepy)),
-  register(sleepy, spawn(fun () -> Sleepy(Sleepy, 1) end)),
+  register(sleepy, spawn(fun () -> Sleepy(Sleepy, {1, []}) end)),
 
-  init("robustness"),
+  init("robustness_channel"),
   ParentPid = self(),
-  UsersSeq = lists:seq(1, ?CONC_USERS * ?CONC_CHANS),
-  MsgsSeq  = lists:seq(1, ?CONC_MSGS),
+  UsersSeq = lists:seq(1, ?CONC_1_USERS * ?CONC_1_CHANS),
+  MsgsSeq  = lists:seq(1, ?CONC_1_MSGS),
 
-  % Everyone joins their channel
-  F = fun (I) ->
+  % Connect and join channel
+  Fjoin = fun (I) ->
+    try
+      output_off(),
+      Is = lists:flatten(integer_to_list(I)),
+      Nick = "user_conc1_"++Is,
+      ClientName = "client_conc1_"++Is,
+      ClientAtom = list_to_atom(ClientName),
+      GUIName = "gui_conc1_"++Is,
+      new_gui(GUIName, ParentPid),
+      ClientPid = genserver:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:loop/2),
+      sleepy ! {add_client, ClientPid},
+      connect(ClientAtom),
+
+      Ch_Ix = (I rem ?CONC_1_CHANS) + 1,
+      Ch_Ixs = lists:flatten(io_lib:format("~p", [Ch_Ix])),
+      Channel = "#channel_"++Ch_Ixs,
+      join_channel(ClientAtom, Channel),
+      {ClientAtom, Channel}
+    catch Ex ->
+      ParentPid ! {failed, Ex} % ignored
+    end
+  end,
+
+  % Send messages
+  Fsend = fun ({ClientAtom,Channel}) ->
+    try
+      % send all messages
+      Send = fun (I2) ->
+        Is2 = lists:flatten(io_lib:format("~p", [I2])),
+        Msg = "message_"++Is2,
+        request(ClientAtom, {msg_from_GUI,Channel,Msg})
+      end,
+      spawn(fun () ->
+        lists:foreach(Send, MsgsSeq),
+        ParentPid ! {ready, ClientAtom} % ignored
+      end),
+      ClientAtom
+    catch Ex ->
+      ParentPid ! {failed, Ex} % ignored
+    end
+  end,
+  putStrLn("spawning ~p channels x ~p clients x ~p messages each (~p of ~p requests will block)", [?CONC_1_CHANS, ?CONC_1_USERS, ?CONC_1_MSGS, SleepCount, NRecvs]),
+  ClientAtoms = lists:map(Fjoin, UsersSeq),
+  output_on(),
+
+  lists:foreach(fun (I) -> spawn(fun() -> Fsend(I) end) end, ClientAtoms),
+
+  % Receive all pending messages
+  Recv = fun (Fn, N) ->
+    receive
+      {msg_to_GUI, _From, _Msg} -> Fn(Fn, N+1)
+    after
+      500 -> N
+    end
+  end,
+  Oks = Recv(Recv, 0),
+  Timeouts = NRecvs - Oks,
+  putStrLn("messages: ~p successful, ~p timed out, ~p total", [Oks, Timeouts, NRecvs]),
+  MinRecvs = NRecvs - SleepCount,
+  Cond = (Oks >= MinRecvs),
+  Msg = sprintf("successful messages is at least ~p", [MinRecvs]),
+  assert(Msg, Cond).
+
+
+robustness_server_test_() ->
+    {timeout, 10, [{test_client,robustness_server}]}.
+
+-define(CONC_3_CHANS, 4).
+-define(CONC_3_USERS, 3). % per channel
+-define(CONC_3_MSGS, 2). % per user
+
+% Kill the server and see if channels still make progress
+%
+%    ch1       ch2       ch3
+%   / | \     / | \     / | \
+% u1 u2 u3  u4 u5 u6  u7 u8 u9
+robustness_server() ->
+  NRecvs = ?CONC_3_CHANS * ?CONC_3_USERS * (?CONC_3_USERS - 1) * ?CONC_3_MSGS, % sent to clients
+
+  ServerPid = init("robustness_server"),
+  ParentPid = self(),
+  UsersSeq = lists:seq(1, ?CONC_3_USERS * ?CONC_3_CHANS),
+  MsgsSeq  = lists:seq(1, ?CONC_3_MSGS),
+
+  % Connect and join channel
+  Fjoin = fun (I) ->
+    try
+      output_off(),
+      Is = lists:flatten(integer_to_list(I)),
+      Nick = "user_conc3_"++Is,
+      ClientName = "client_conc3_"++Is,
+      ClientAtom = list_to_atom(ClientName),
+      GUIName = "gui_conc3_"++Is,
+      new_gui(GUIName, ParentPid),
+      genserver:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:loop/2),
+      connect(ClientAtom),
+
+      Ch_Ix = (I rem ?CONC_3_CHANS) + 1,
+      Ch_Ixs = lists:flatten(io_lib:format("~p", [Ch_Ix])),
+      Channel = "#channel_"++Ch_Ixs,
+      join_channel(ClientAtom, Channel),
+      {ClientAtom,Channel}
+    catch Ex ->
+      ParentPid ! {failed, Ex} % ignored
+    end
+  end,
+
+  % Send messages
+  Fsend = fun ({ClientAtom,Channel}) ->
+    try
+      Send = fun (I2) ->
+        Is2 = lists:flatten(io_lib:format("~p", [I2])),
+        Msg = "message_"++Is2,
+        request(ClientAtom, {msg_from_GUI,Channel,Msg})
+      end,
+      spawn(fun () ->
+        lists:foreach(Send, MsgsSeq),
+        ParentPid ! {ready, ClientAtom} % ignored
+      end)
+    catch Ex ->
+      ParentPid ! {failed, Ex} % ignored
+    end
+  end,
+  putStrLn("spawning ~p channels x ~p clients each", [?CONC_3_CHANS, ?CONC_3_USERS]),
+  ClientAtoms = lists:map(Fjoin, UsersSeq),
+  output_on(),
+
+  Killed = exit(ServerPid, kill),
+  assert("killing server", Killed),
+
+  putStrLn("sending messages"),
+  lists:foreach(fun (I) -> spawn(fun() -> Fsend(I) end) end, ClientAtoms),
+
+  % Receive all pending messages
+  Recv = fun (Fn, N) ->
+    receive
+      {msg_to_GUI, _From, _Msg} -> Fn(Fn, N+1)
+    after
+      500 -> N
+    end
+  end,
+  Oks = Recv(Recv, 0),
+  Timeouts = NRecvs - Oks,
+  putStrLn("messages: ~p successful, ~p timed out, ~p total", [Oks, Timeouts, NRecvs]),
+  Cond = (Oks =:= NRecvs),
+  Msg = "all messages successful",
+  assert(Msg, Cond).
+
+
+% Counts how many processes are created when clients join channels
+
+-define(CONC_2_CHANS, 4).
+-define(CONC_2_USERS, 3).
+
+process_usage_test_DISABLED() ->
+  init("process_usage"),
+  ParentPid = self(),
+  ChansSeq = lists:seq(1, ?CONC_2_CHANS),
+  UsersSeq = lists:seq(1, ?CONC_2_USERS),
+  Procs1 = length(erlang:processes()),
+  Fconnect = fun (I) ->
+    Is = lists:flatten(integer_to_list(I)),
+    Nick = "user_conc2_"++Is,
+    ClientName = "client_conc2_"++Is,
+    ClientAtom = list_to_atom(ClientName),
+    GUIName = "gui_conc2_"++Is,
+    new_gui(GUIName),
+    genserver:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:loop/2),
+    connect(ClientAtom),
+    ClientAtom
+  end,
+  Fjoin = fun (ClientAtom) ->
     fun () ->
-      try
-        output_off(),
-        Is = lists:flatten(integer_to_list(I)),
-        Nick = "user_conc_"++Is,
-        ClientName = "client_conc_"++Is,
-        ClientAtom = list_to_atom(ClientName),
-        GUIName = "gui_conc_"++Is,
-        new_gui(GUIName),
-        genserver:start(ClientAtom, client:initial_state(Nick, GUIName), fun client:loop/2),
-        connect(ClientAtom),
-
-        Ch_Ix = (I rem ?CONC_CHANS) + 1,
+      output_off(),
+      G = fun(Ch_Ix) ->
         Ch_Ixs = lists:flatten(io_lib:format("~p", [Ch_Ix])),
         Channel = "#channel_"++Ch_Ixs,
-        join_channel(ClientAtom, Channel),
-
-        % send all messages
-        Send = fun (I2) ->
-          Is2 = lists:flatten(io_lib:format("~p", [I2])),
-          Msg = "message_"++Is++"_"++Is2,
-          request(ClientAtom, {msg_from_GUI,Channel,Msg})
-        end,
-        spawn(fun () ->
-          % timer:sleep(500), % give time for all channels to set up?
-          lists:foreach(Send, MsgsSeq),
-          ParentPid ! {ready, Is}
-        end)
-
-        % disconnect(ClientAtom),
-      catch Ex ->
-        ParentPid ! {failed, Ex}
-      end
+        join_channel(ClientAtom, Channel)
+      end,
+      lists:foreach(G, ChansSeq),
+      ParentPid ! {ready, 123}
     end
   end,
-  Spawn = fun (I) -> spawn(F(I)) end,
-  Recv  = fun (_) ->
+  putStrLn("spawning ~p clients and connecting to server", [?CONC_2_USERS]),
+  output_off(),
+  ClientAtoms = lists:map(Fconnect, UsersSeq),
+  output_on(),
+  Procs2 = length(erlang:processes()),
+  Msg2 = sprintf("processes scale with clients (~p -> ~p)", [Procs1, Procs2]),
+  assert(Msg2, (Procs2 - Procs1) =:= (2 * ?CONC_2_USERS)), % 2 per client
+
+  putStrLn("each client joins the same ~p channels", [?CONC_2_CHANS]),
+  lists:foreach(fun (Atom) -> spawn(Fjoin(Atom)) end, ClientAtoms),
+  Recv = fun (_) ->
     receive
-      {ready, _} -> ok ;
-      {failed, Ex} -> putStrLn(Ex), throw("FAILED")
-    after 500 ->
-      timeout
+      {ready, Time} -> Time ;
+      {failed, Ex} -> putStrLn(Ex), throw("")
     end
   end,
-  putStrLn("spawning ~p channels × ~p clients × ~p messages each (message ~p of ~p will block)", [?CONC_CHANS, ?CONC_USERS, ?CONC_MSGS, SleepN, NMsgs]),
-  spawn(fun() -> lists:foreach(Spawn, UsersSeq) end),
-  Resps = lists:map(Recv, UsersSeq),
-  Oks = lists:filter(fun (I) -> I == ok end, Resps),
-  Timeouts = lists:filter(fun (I) -> I == timeout end, Resps),
-  putStrLn("clients: ~p successful, ~p timed out, ~p total", [length(Oks), length(Timeouts), length(Resps)]),
-  Cond = (length(Oks) >= MinUsers) and (length(Oks) < MaxUsers),
-  Msg = sprintf("successful clients is between ~p and ~p", [MinUsers, MaxUsers-1]),
-  assert(Msg, Cond).
+  lists:map(Recv, UsersSeq),
+  Procs3 = length(erlang:processes()),
+  Msg3 = sprintf("processes scale with channels (~p -> ~p)", [Procs2, Procs3]),
+  Cond = (Procs3 > Procs2) and ((Procs3 - Procs2) rem (?CONC_2_CHANS) =:= 0), % at least one each
+  assert(Msg3, Cond),
+  ok.
 
 % --- Performance unit tests -------------------------------------------------
 
