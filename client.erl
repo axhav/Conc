@@ -24,7 +24,6 @@ loop(St = #client_st{nick = Nick,connected = Connected}, {connect, Server}) ->
             end,
             if 
                 SPid /= undefined ->
-                    %io:format("stuff ~p~n ~p~n",[SPid,self()]),
                     Result = genserver:request(SPid,{connect,Nick}),
                     case Result of
                         ok ->
@@ -62,9 +61,6 @@ loop(St = #client_st{nick = Nick,connected = SPid, channels = Chan}, disconnect)
     end;
 
             
-        
-    %{{error, not_implemented, "Not implemented"}, St} ;
-
 % Join channel
 loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {join, Channel}) ->
     Result = genserver:request(SPid,{join,self(),Nick,Channel}),
@@ -76,8 +72,8 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {join, Chann
         _ -> 
             {{error,user_already_joined,"User already joined the channel"},St}
     end;
-    %{{error, not_implemented, "Not implemented"}, St} ;
-
+    
+    
 %% Leave channel
 loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {leave, Channel}) ->
     Result = genserver:request(SPid,{leave,Nick,Channel}),
@@ -89,8 +85,8 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {leave, Chan
         _ ->
             {{error,user_not_joined,"User not connected to a channel"},St}
     end;
-    %{{error, not_implemented, "Not implemented"}, St} ;
-
+    
+    
 % Sending messages
 loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GUI, Channel, Msg}) ->
     Temp = lists:any(fun(X) -> X ==Channel end,  Chan),
@@ -108,8 +104,8 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GU
         true -> 
             {{error,user_not_joined,"User is not connected to that channel"},St}
     end;
-    % {{error, not_implemented, "Not implemented"}, St} ;
 
+    
 %% Get current nick
 loop(St = #client_st{nick = Nick}, whoami) ->
     {Nick, St};
@@ -118,7 +114,7 @@ loop(St = #client_st{nick = Nick}, whoami) ->
 %% Change nick
 loop(St = #client_st{connected = Connected}, {nick, Nick}) ->
     if 
-        Connected == true ->
+        Connected /= false ->
             {{error,user_already_connected , "Cant change nick while connected"},St} ;
         true -> 
             St1 = St#client_st{nick = Nick},

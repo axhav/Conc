@@ -8,8 +8,8 @@ initial_state(ServerName) ->
 
 %% ---------------------------------------------------------------------------
 
+% The main engine of the server
 loop(St = #server_st{users = Users,channels = Channels}, Message) ->
-    %io:format("server stuff ~p~n",[Message]),
     case Message of
         {connect,Nick} ->
             Temp2= lists:any(fun(X) -> X==Nick end,Users),
@@ -19,7 +19,6 @@ loop(St = #server_st{users = Users,channels = Channels}, Message) ->
                 true ->
                     NUsers = lists:append(Users,[Nick]),
                     NSt = St#server_st{users = NUsers},
-                    %io:format("server stuff ~p~n",NUsers),
                     {ok,NSt}
             end;
         {disconnect,Nick} ->
@@ -31,9 +30,7 @@ loop(St = #server_st{users = Users,channels = Channels}, Message) ->
             if
                 Temp2 == false -> 
                     genserver:start(list_to_atom(Channel),initial_cstate(Channel),fun chatroom/2),
-                    %io:format("server stuff in join~n"),
                     Result = genserver:request(list_to_atom(Channel),{join,Pid,Nick}),
-                    %io:format("server stuff in join~n"),
                     NChannels =lists:append(Channels,[Channel]),
                     NSt = St#server_st{channels = NChannels},
                     case Result of
@@ -52,11 +49,9 @@ loop(St = #server_st{users = Users,channels = Channels}, Message) ->
                     end
             end;
         {leave,Nick,Channel} ->
-            %io:format("server stuff in leave enter ~p~n",Channels),
             Temp2 = lists:any(fun(X) -> X==Channel end, Channels),
             if
                 Temp2 ->
-                   % io:format("server stuff in leave~p~n",Channels),
                     Result = genserver:request(list_to_atom(Channel),{leave,Nick}),
                     case Result of
                         ok -> 
@@ -75,11 +70,14 @@ loop(St = #server_st{users = Users,channels = Channels}, Message) ->
     end.
     
 
+    
+% Creates the initial state of the chatroom
 initial_cstate(ChatName) ->
     #chat_st{name = ChatName,users = []}.
     
+
+% The chatroom engine
 chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
-    %io:format("server stuff in channel~n"),
     case Message of
         {join,Pid,Nick} ->
             Temp2 = lists:any(fun({_,X}) -> X==Nick end, Users),
@@ -97,7 +95,6 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
             NSt = St#chat_st{users = NUsers},
             L1 = length(Users),
             L2 = length(NUsers),
-            %io:format("server stuff in if ~p~p~n",[Users,NUsers]),
             if
                 L2 == L1 ->
                     {error,St};
@@ -105,11 +102,11 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                     {ok,NSt}
             end;
         {send,Nick,Msg} ->
-            % [ genserver:request(P,{incoming_msg, ChatName, Nick, Msg})||  {P,U} <- Users,U /= Nick ],
             spawn(fun() -> sendMessages(Users,Nick,Msg,ChatName) end),
             {ok,St}  
     end.
     
+% Helper function for channel to send a message to all memebers of that chatroom
 sendMessages([] ,_,_,_) ->
     done;
 sendMessages([{P,U}|XS] ,Nick,Msg,ChatName) ->
