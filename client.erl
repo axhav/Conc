@@ -24,11 +24,12 @@ loop(St = #client_st{nick = Nick,connected = Connected}, {connect, Server}) ->
             end,
             if 
                 SPid /= undefined ->
-                    Result = genserver:request(SPid,{connect,Nick}),
-                    case Result of
+                    case catch(genserver:request(SPid,{connect,Nick})) of
                         ok ->
                             St1 = St#client_st{connected = SPid},
                             {ok,St1};
+                        {_,"Timeout"} ->
+                            {{error,server_not_reached ,"Server not reached"},St};
                         _ ->
                             {{error,user_already_connected,"Some one with that nick is already connected"},St}
                     end;
@@ -96,7 +97,6 @@ loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {msg_from_GU
        _ ->
             EndChan = list_to_atom(Channel)
     end,
-    io:format("server stuff ~p~n",[EndChan]),
     if 
         Temp -> 
             Result = genserver:request(EndChan,{send,Nick,Msg}),

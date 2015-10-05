@@ -102,18 +102,9 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                     {ok,NSt}
             end;
         {send,Nick,Msg} ->
-            spawn(fun() -> sendMessages(Users,Nick,Msg,ChatName) end),
+            [spawn(fun() -> genserver:request(P,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
             {ok,St}  
     end.
     
-% Helper function for channel to send a message to all memebers of that chatroom
-sendMessages([] ,_,_,_) ->
-    done;
-sendMessages([{P,U}|XS] ,Nick,Msg,ChatName) ->
-    if
-        U == Nick ->
-            sendMessages(XS,Nick,Msg,ChatName);
-        true ->
-            genserver:request(P,{incoming_msg, ChatName, Nick, Msg}),
-            sendMessages(XS,Nick,Msg,ChatName)
-    end.
+    
+    
