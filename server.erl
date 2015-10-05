@@ -102,7 +102,7 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                     {ok,NSt}
             end;
         {send,Nick,Msg} ->
-            [spawn(fun() -> genserver:request(P,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
+            [spawn(fun() -> genserver:requestAsync(P,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
             {ok,St}  
     end.
     
