@@ -66,7 +66,7 @@ loop(St = #client_st{nick = Nick,connected = SPid, channels = Chan}, disconnect)
 loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {join, Channel}) ->
     case SPid of
         {_,_} ->
-            Result = genserver:request(SPid,{join,{self(),node()},Nick,Channel});
+            Result = genserver:request(SPid,{join,{list_to_atom(self()),node()},Nick,Channel});
         _ ->
             Result = genserver:request(SPid,{join,self(),Nick,Channel})
     end,
