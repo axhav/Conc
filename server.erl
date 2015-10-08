@@ -102,7 +102,14 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                     {ok,NSt}
             end;
         {send,Nick,Msg} ->
-            [spawn(fun() -> genserver:requestAsync(P,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
+            [spawn(fun() ->
+                case P of
+                {Pid, Add} ->
+                    CPid = {list_to_atom(Pid),list_to_atom(Add)};
+                _ ->
+                    CPid = whereis(list_to_atom(P))
+                end,
+                genserver:requestAsync(CPid,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
             {ok,St}  
     end.
     
