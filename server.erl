@@ -107,7 +107,7 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                 {Pid, Add} ->
                     CPid = {list_to_atom(Pid),list_to_atom(Add)};
                 _ ->
-                    CPid = list_to_atom(P)
+                    CPid = P
                 end,
                 genserver:requestAsync(CPid,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
             {ok,St}  
