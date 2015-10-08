@@ -64,12 +64,12 @@ loop(St = #client_st{nick = Nick,connected = SPid, channels = Chan}, disconnect)
             
 % Join channel
 loop(St = #client_st{nick = Nick,connected = SPid,channels = Chan}, {join, Channel}) ->
-    case SPid of
-        {_,_} ->
-            Result = genserver:request(SPid,{join,{list_to_atom(self()),node()},Nick,Channel});
-        _ ->
-            Result = genserver:request(SPid,{join,self(),Nick,Channel})
-    end,
+    % case SPid of
+    %    {_,_} ->
+    %        Result = genserver:request(SPid,{join,{list_to_atom(self()),node()},Nick,Channel});
+    %    _ ->
+            Result = genserver:request(SPid,{join,self(),Nick,Channel}),
+    %end,
     case Result of
         ok -> 
             NChannel = lists:append(Chan,[Channel]),
