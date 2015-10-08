@@ -85,6 +85,7 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                 Temp2 -> 
                     {error,St};
                 true ->
+                    io:format("chatroomstuff ~p~n",[Pid]),
                     NUsers = lists:append(Users,[{Pid,Nick}]),
                     NSt = St#chat_st{users = NUsers},
                     {ok,NSt}
@@ -102,14 +103,7 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
                     {ok,NSt}
             end;
         {send,Nick,Msg} ->
-            [spawn(fun() ->
-                case P of
-                {Pid, Add} ->
-                    CPid = {list_to_atom(Pid),list_to_atom(Add)};
-                _ ->
-                    CPid = P
-                end,
-                genserver:requestAsync(CPid,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
+            [spawn(fun() -> genserver:requestAsync(P,{incoming_msg, ChatName, Nick, Msg}) end) || {P,U} <- Users , U /= Nick],
             {ok,St}  
     end.
     
