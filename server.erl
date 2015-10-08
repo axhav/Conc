@@ -84,8 +84,7 @@ chatroom(St = #chat_st{name = ChatName,users = Users}, Message) ->
             if
                 Temp2 -> 
                     {error,St};
-                true ->
-                    io:format("chatroomstuff ~p~n",[Pid]),
+                true ->  
                     NUsers = lists:append(Users,[{Pid,Nick}]),
                     NSt = St#chat_st{users = NUsers},
                     {ok,NSt}
